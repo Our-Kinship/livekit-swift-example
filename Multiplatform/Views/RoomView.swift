@@ -611,6 +611,10 @@ struct RoomView: View {
                 }
             }
         }
+        .task {
+            try? await Task.sleep(for: .seconds(10))
+            await room.disconnect()
+        }
     }
 }
 

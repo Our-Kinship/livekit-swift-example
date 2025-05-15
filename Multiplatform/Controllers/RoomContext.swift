@@ -166,6 +166,8 @@ final class RoomContext: ObservableObject {
                                         token: self.token,
                                         connectOptions: connectOptions,
                                         roomOptions: roomOptions)
+            try await room.localParticipant.setCamera(enabled: true)
+            try await room.localParticipant.setMicrophone(enabled: true)
         }
 
         _connectTask = connectTask

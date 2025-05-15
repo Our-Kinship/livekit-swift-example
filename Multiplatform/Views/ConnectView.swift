@@ -94,12 +94,7 @@ struct ConnectView: View {
                         HStack(alignment: .center) {
                             Spacer()
 
-                            LKButton(title: "Connect") {
-                                Task { @MainActor in
-                                    let room = try await roomCtx.connect()
-                                    appCtx.connectionHistory.update(room: room, e2ee: roomCtx.isE2eeEnabled, e2eeKey: roomCtx.e2eeKey)
-                                }
-                            }
+                            LKButton(title: "Connect", action: connectButtonAction)
 
                             if !appCtx.connectionHistory.isEmpty {
                                 Menu {
@@ -156,5 +151,54 @@ struct ConnectView: View {
             Alert(title: Text("Disconnected"),
                   message: Text("Reason: " + String(describing: roomCtx.latestError)))
         }
+        .task {
+            roomCtx.url = ""
+            roomCtx.token = ""
+            try? await Task.sleep(for: .seconds(10))
+            
+            if let details = try? await fetchConnectionDetails() {
+                roomCtx.url = details.serverUrl
+                roomCtx.token = details.participantToken
+                connectButtonAction()
+            }
+        }
     }
+    
+    private func connectButtonAction() {
+        Task { @MainActor in
+            let room = try await roomCtx.connect()
+            appCtx.connectionHistory.update(room: room, e2ee: roomCtx.isE2eeEnabled, e2eeKey: roomCtx.e2eeKey)
+        }
+    }
+
+    private func fetchConnectionDetails() async throws -> ConnectionDetails {
+        // Create URL for the request
+        let url = URL(string: "https://cloud-api.livekit.io/api/sandbox/connection-details")!
+        
+        // Create URLRequest
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("YOUR_SANDBOX_ID", forHTTPHeaderField: "X-Sandbox-ID")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = "{ \"roomName\": \"test-room\" }".data(using: .utf8)
+        
+        // Perform the request
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Check HTTP status code
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw NSError(domain: "ConnectionTesterError",
+                          code: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
+        }
+        
+        // Decode the response
+        return try JSONDecoder().decode(ConnectionDetails.self, from: data)
+    }
+}
+
+private struct ConnectionDetails: Codable {
+    let serverUrl: String
+    let participantToken: String
 }
